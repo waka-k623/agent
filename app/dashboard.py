@@ -10,9 +10,12 @@ from app.audit import AuditLogger
 from app.auth import UserContext, UserStore
 from app.company_config import CompanyConfigStore
 from app.demo_data import build_demo_queue, calculate_demo_kpis
+from app.runtime import RuntimeConfig
 from app.workflows.review_queue import SalesReviewQueue
 
 st.set_page_config(page_title="Sales Agent Review", page_icon="🤖", layout="wide")
+
+runtime = RuntimeConfig.from_env()
 
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -21,7 +24,7 @@ if "decisions" not in st.session_state:
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
 if "demo_mode" not in st.session_state:
-    st.session_state.demo_mode = True
+    st.session_state.demo_mode = runtime.demo_mode_default or runtime.is_demo
 
 user_store = UserStore()
 user_store.ensure_demo_users()
@@ -47,7 +50,8 @@ def login_screen() -> None:
         st.session_state.decisions = {}
         st.rerun()
 
-    st.info("デモ環境では環境変数 DEMO_ADMIN_PASSWORD / DEMO_USER_PASSWORD で初期パスワードを変更してください。")
+    if runtime.is_demo:
+        st.info("デモ環境です。外部サービスへのライブ書き込みは無効化されています。")
 
 
 if st.session_state.current_user is None:
@@ -60,11 +64,22 @@ st.caption("営業案件を確認し、AIが提案した外部アクションを
 
 st.sidebar.write(f"**ログイン:** {user.display_name or user.username}")
 st.sidebar.caption("管理者" if user.role == "admin" else "一般ユーザー")
-st.session_state.demo_mode = st.sidebar.toggle(
-    "デモモード",
-    value=st.session_state.demo_mode,
-    help="実データや外部サービスを書き換えず、サンプル案件でSales Agentの動作を確認します。",
-)
+
+if runtime.is_demo:
+    st.session_state.demo_mode = True
+    st.sidebar.toggle(
+        "デモモード",
+        value=True,
+        disabled=True,
+        help="公開デモ環境では実データモードへ切り替えられません。",
+    )
+else:
+    st.session_state.demo_mode = st.sidebar.toggle(
+        "デモモード",
+        value=st.session_state.demo_mode,
+        help="サンプル案件を使い、外部サービスを書き換えずに動作確認します。",
+    )
+
 if st.sidebar.button("ログアウト", use_container_width=True):
     st.session_state.current_user = None
     st.session_state.queue = []
@@ -90,6 +105,10 @@ def refresh_queue() -> None:
     if st.session_state.demo_mode:
         st.session_state.queue = build_demo_queue()
         st.session_state.decisions = {}
+        return
+
+    if runtime.is_demo:
+        st.error("公開デモ環境では実データを読み込めません。")
         return
 
     with st.spinner("Gmail / Contacts / CRM / Calendar を確認しています..."):
