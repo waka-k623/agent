@@ -24,33 +24,83 @@ def run_preflight() -> list[CheckResult]:
     runtime = RuntimeConfig.from_env()
 
     provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    provider_key = ""
+    provider_label = ""
     if provider == "openai":
-        key = os.getenv("OPENAI_API_KEY", "").strip()
-        checks.append(CheckResult("AI Provider", bool(key), "OpenAI API key configured" if key else "OPENAI_API_KEY is missing"))
+        provider_key = os.getenv("OPENAI_API_KEY", "").strip()
+        provider_label = "OpenAI"
     elif provider == "anthropic":
-        key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-        checks.append(CheckResult("AI Provider", bool(key), "Anthropic API key configured" if key else "ANTHROPIC_API_KEY is missing"))
+        provider_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        provider_label = "Anthropic"
     else:
         checks.append(CheckResult("AI Provider", False, f"Unsupported LLM_PROVIDER: {provider}"))
 
+    if provider_label:
+        checks.append(
+            CheckResult(
+                "AI Provider",
+                bool(provider_key),
+                f"{provider_label} API key configured" if provider_key else f"{provider_label} API key is missing; live AI analysis is unavailable",
+                severity="warning" if runtime.is_demo else "error",
+            )
+        )
+
     credentials = Path(os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json"))
-    checks.append(CheckResult("Google OAuth credentials", credentials.exists(), f"Found {credentials}" if credentials.exists() else f"Missing {credentials}"))
+    checks.append(
+        CheckResult(
+            "Google OAuth credentials",
+            credentials.exists(),
+            f"Found {credentials}" if credentials.exists() else f"Missing {credentials}; live Google integrations are unavailable",
+            severity="warning" if runtime.is_demo else "error",
+        )
+    )
 
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID", "").strip()
-    checks.append(CheckResult("Sheets CRM", bool(spreadsheet_id), "Spreadsheet ID configured" if spreadsheet_id else "GOOGLE_SHEETS_SPREADSHEET_ID is missing"))
+    checks.append(
+        CheckResult(
+            "Sheets CRM",
+            bool(spreadsheet_id),
+            "Spreadsheet ID configured" if spreadsheet_id else "GOOGLE_SHEETS_SPREADSHEET_ID is missing; live CRM sync is unavailable",
+            severity="warning" if runtime.is_demo else "error",
+        )
+    )
 
     if runtime.is_demo:
-        checks.append(CheckResult("Demo safety", not runtime.allow_live_writes, "Live writes disabled in demo" if not runtime.allow_live_writes else "Demo environment must not allow live writes"))
+        checks.append(
+            CheckResult(
+                "Demo safety",
+                not runtime.allow_live_writes,
+                "Live writes disabled in demo" if not runtime.allow_live_writes else "Demo environment must not allow live writes",
+            )
+        )
+        checks.append(
+            CheckResult(
+                "Demo mode lock",
+                runtime.demo_mode_default,
+                "Demo mode defaults to enabled" if runtime.demo_mode_default else "DEMO_MODE_DEFAULT should be true for public demo",
+            )
+        )
     else:
         checks.append(CheckResult("Production environment", True, "Production mode enabled", severity="warning"))
-        checks.append(CheckResult("Live write gate", runtime.allow_live_writes, "Live writes enabled" if runtime.allow_live_writes else "Live writes disabled (safe default)", severity="warning"))
+        checks.append(
+            CheckResult(
+                "Live write gate",
+                runtime.allow_live_writes,
+                "Live writes enabled" if runtime.allow_live_writes else "Live writes disabled (safe default; enable only after approval)",
+                severity="warning",
+            )
+        )
 
     admin_pw = os.getenv("DEMO_ADMIN_PASSWORD", "").strip()
     user_pw = os.getenv("DEMO_USER_PASSWORD", "").strip()
-    if runtime.is_demo:
-        checks.append(CheckResult("Demo login credentials", bool(admin_pw and user_pw), "Demo passwords configured" if admin_pw and user_pw else "Set DEMO_ADMIN_PASSWORD and DEMO_USER_PASSWORD before public deployment", severity="warning"))
-    else:
-        checks.append(CheckResult("Production login credentials", bool(admin_pw and user_pw), "Initial passwords configured" if admin_pw and user_pw else "Production passwords are not configured"))
+    checks.append(
+        CheckResult(
+            "Login credentials",
+            bool(admin_pw and user_pw),
+            "Initial passwords configured" if admin_pw and user_pw else "Set DEMO_ADMIN_PASSWORD and DEMO_USER_PASSWORD before deployment",
+            severity="error",
+        )
+    )
 
     return checks
 
