@@ -4,18 +4,21 @@ from typing import Any
 
 from app.actions.approval import ProposedAction
 from app.actions.google_actions import CalendarEventAction, CRMUpdateAction, GmailDraftAction
+from app.runtime import RuntimeConfig
 
 
 class ActionExecutor:
-    """Executes only explicitly approved external actions."""
+    """Executes only explicitly approved external actions in a write-enabled environment."""
 
-    def __init__(self) -> None:
+    def __init__(self, runtime: RuntimeConfig | None = None) -> None:
+        self.runtime = runtime or RuntimeConfig.from_env()
         self.gmail = GmailDraftAction()
         self.calendar = CalendarEventAction()
         self.crm = CRMUpdateAction()
 
     def execute(self, action: ProposedAction) -> dict[str, Any]:
         action.require_approval()
+        self.runtime.require_live_writes_enabled()
 
         if action.action_type == "gmail_draft":
             return self.gmail.execute(action)
