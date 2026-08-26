@@ -6,6 +6,7 @@ import streamlit as st
 
 from app.actions.approval import ProposedAction
 from app.actions.executor import ActionExecutor
+from app.company_config import CompanyConfigStore
 from app.workflows.review_queue import SalesReviewQueue
 
 st.set_page_config(page_title="Sales Agent Review", page_icon="🤖", layout="wide")
@@ -17,23 +18,47 @@ if "queue" not in st.session_state:
     st.session_state.queue = []
 if "decisions" not in st.session_state:
     st.session_state.decisions = {}
+if "company_id" not in st.session_state:
+    st.session_state.company_id = "default"
+
+store = CompanyConfigStore()
+company_ids = store.list_company_ids() or ["default"]
+selected_company = st.selectbox(
+    "会社設定",
+    options=company_ids,
+    index=company_ids.index(st.session_state.company_id)
+    if st.session_state.company_id in company_ids
+    else 0,
+)
+
+if selected_company != st.session_state.company_id:
+    st.session_state.company_id = selected_company
+    st.session_state.queue = []
+    st.session_state.decisions = {}
+
+try:
+    company = store.load(st.session_state.company_id)
+    st.caption(f"現在の設定: {company.company_name} / {company.industry}")
+except Exception:
+    company = None
 
 
 def refresh_queue() -> None:
     with st.spinner("Gmail / Contacts / CRM / Calendar を確認しています..."):
-        st.session_state.queue = SalesReviewQueue().build(max_results=10)
+        st.session_state.queue = SalesReviewQueue(
+            company_id=st.session_state.company_id
+        ).build(max_results=10)
         st.session_state.decisions = {}
 
 
 def proposed_action_from_dict(data: dict[str, Any]) -> ProposedAction:
-    action = ProposedAction(
+    return ProposedAction(
         action_type=data["action_type"],
         payload=data.get("payload", {}),
         reason=data.get("reason", ""),
         id=data.get("id"),
         approved=bool(data.get("approved", False)),
     )
-    return action
 
 
 col1, col2 = st.columns([1, 4])
