@@ -120,3 +120,38 @@ class SheetsCRMConnector(Connector):
             if str(lead.get("email", "")).strip().lower() == email_normalized:
                 return lead
         return None
+
+    def update_lead_by_email(self, email: str, updates: dict[str, Any]) -> dict[str, Any]:
+        """Update selected CRM fields for the first lead matching email."""
+        self.ensure_headers()
+        email_normalized = email.strip().lower()
+        result = self._service().spreadsheets().values().get(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{self.sheet_name}!A2:J",
+        ).execute()
+        rows = result.get("values", [])
+
+        for index, row in enumerate(rows, start=2):
+            padded = row + [""] * (len(DEFAULT_HEADERS) - len(row))
+            lead = dict(zip(DEFAULT_HEADERS, padded))
+            if str(lead.get("email", "")).strip().lower() != email_normalized:
+                continue
+
+            for key, value in updates.items():
+                if key in DEFAULT_HEADERS:
+                    lead[key] = value
+
+            updated_row = [[str(lead.get(header, "")) for header in DEFAULT_HEADERS]]
+            update_result = self._service().spreadsheets().values().update(
+                spreadsheetId=self.spreadsheet_id,
+                range=f"{self.sheet_name}!A{index}:J{index}",
+                valueInputOption="USER_ENTERED",
+                body={"values": updated_row},
+            ).execute()
+            return {
+                "ok": True,
+                "updated_range": update_result.get("updatedRange"),
+                "email": email,
+            }
+
+        return {"ok": False, "error": "lead_not_found", "email": email}
