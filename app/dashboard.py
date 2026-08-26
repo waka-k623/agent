@@ -7,65 +7,72 @@ import streamlit as st
 from app.actions.approval import ProposedAction
 from app.actions.executor import ActionExecutor
 from app.audit import AuditLogger
-from app.auth import UserContext
+from app.auth import UserContext, UserStore
 from app.company_config import CompanyConfigStore
 from app.workflows.review_queue import SalesReviewQueue
 
 st.set_page_config(page_title="Sales Agent Review", page_icon="🤖", layout="wide")
 
-st.title("Sales Agent Review")
-st.caption("営業案件を確認し、AIが提案した外部アクションを承認または却下します。")
-
 if "queue" not in st.session_state:
     st.session_state.queue = []
 if "decisions" not in st.session_state:
     st.session_state.decisions = {}
-if "company_id" not in st.session_state:
-    st.session_state.company_id = "default"
-if "actor" not in st.session_state:
-    st.session_state.actor = "local_user"
-if "role" not in st.session_state:
-    st.session_state.role = "user"
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
 
-store = CompanyConfigStore()
+user_store = UserStore()
+user_store.ensure_demo_users()
+company_store = CompanyConfigStore()
 audit = AuditLogger()
-company_ids = store.list_company_ids() or ["default"]
 
-st.session_state.actor = st.sidebar.text_input(
-    "操作者",
-    value=st.session_state.actor,
-    help="監査ログに記録する操作者名です。企業導入時はログインユーザーIDに置き換えます。",
-)
-st.session_state.role = st.sidebar.selectbox(
-    "権限",
-    options=["user", "admin"],
-    index=0 if st.session_state.role == "user" else 1,
-    format_func=lambda value: "一般ユーザー" if value == "user" else "管理者",
-)
-user = UserContext(
-    username=st.session_state.actor or "unknown",
-    role=st.session_state.role,
-)
 
-if user.can_manage_company_settings():
-    sidebar_company = st.sidebar.selectbox(
-        "会社設定",
-        options=company_ids,
-        index=company_ids.index(st.session_state.company_id)
-        if st.session_state.company_id in company_ids
-        else 0,
-    )
-else:
-    sidebar_company = st.session_state.company_id
-    st.sidebar.caption(f"会社設定: {sidebar_company}")
+def login_screen() -> None:
+    st.title("Sales Agent Login")
+    st.caption("営業支援AIの管理画面にログインしてください。")
+    with st.form("login_form"):
+        username = st.text_input("ユーザー名")
+        password = st.text_input("パスワード", type="password")
+        submitted = st.form_submit_button("ログイン", type="primary", use_container_width=True)
 
-if sidebar_company != st.session_state.company_id:
-    st.session_state.company_id = sidebar_company
+    if submitted:
+        record = user_store.authenticate(username, password)
+        if record is None:
+            st.error("ユーザー名またはパスワードが正しくありません。")
+            return
+        st.session_state.current_user = record.to_context()
+        st.session_state.queue = []
+        st.session_state.decisions = {}
+        st.rerun()
+
+    st.info("デモ環境では環境変数 DEMO_ADMIN_PASSWORD / DEMO_USER_PASSWORD で初期パスワードを変更してください。")
+
+
+if st.session_state.current_user is None:
+    login_screen()
+    st.stop()
+
+user: UserContext = st.session_state.current_user
+st.title("Sales Agent Review")
+st.caption("営業案件を確認し、AIが提案した外部アクションを承認または却下します。")
+
+st.sidebar.write(f"**ログイン:** {user.display_name or user.username}")
+st.sidebar.caption("管理者" if user.role == "admin" else "一般ユーザー")
+if st.sidebar.button("ログアウト", use_container_width=True):
+    st.session_state.current_user = None
     st.session_state.queue = []
     st.session_state.decisions = {}
+    st.rerun()
+
+company_ids = company_store.list_company_ids() or ["default"]
+if user.can_manage_company_settings():
+    default_index = company_ids.index(user.company_id) if user.company_id in company_ids else 0
+    company_id = st.sidebar.selectbox("会社設定", company_ids, index=default_index)
+else:
+    company_id = user.company_id
+    st.sidebar.caption(f"会社設定: {company_id}")
 
 try:
-    company = store.load(st.session_state.company_id)
+    company = company_store.load(company_id)
     st.sidebar.caption(f"{company.company_name} / {company.industry}")
 except Exception:
     company = None
@@ -73,9 +80,7 @@ except Exception:
 
 def refresh_queue() -> None:
     with st.spinner("Gmail / Contacts / CRM / Calendar を確認しています..."):
-        st.session_state.queue = SalesReviewQueue(
-            company_id=st.session_state.company_id
-        ).build(max_results=10)
+        st.session_state.queue = SalesReviewQueue(company_id=company_id).build(max_results=10)
         st.session_state.decisions = {}
 
 
@@ -104,14 +109,12 @@ with review_tab:
         st.info("承認ボタンを押すまで、Gmail・Calendar・CRMへの書き込みは実行されません。")
 
     queue = st.session_state.queue
-
     if not queue:
         st.write("まだ分析結果がありません。『受信箱を分析』を押してください。")
     else:
         for index, item in enumerate(queue):
             analysis = item.get("analysis", {})
             actions = item.get("proposed_actions", [])
-
             priority = str(analysis.get("priority", "low")).upper()
             sender = analysis.get("sender", "")
             subject = analysis.get("subject", "(件名なし)")
@@ -166,17 +169,12 @@ with review_tab:
 
                         approve_col, reject_col = st.columns(2)
                         with approve_col:
-                            if st.button(
-                                "承認して実行",
-                                type="primary",
-                                use_container_width=True,
-                                key=f"approve_{action_id}",
-                            ):
+                            if st.button("承認して実行", type="primary", use_container_width=True, key=f"approve_{action_id}"):
                                 action = proposed_action_from_dict(action_data)
                                 action.approve()
                                 audit.log(
                                     event_type="approval",
-                                    company_id=st.session_state.company_id,
+                                    company_id=company_id,
                                     action_id=action.id,
                                     action_type=action.action_type,
                                     actor=user.username,
@@ -187,13 +185,10 @@ with review_tab:
                                 )
                                 try:
                                     result = ActionExecutor().execute(action)
-                                    st.session_state.decisions[action_id] = {
-                                        "status": "executed",
-                                        "result": result,
-                                    }
+                                    st.session_state.decisions[action_id] = {"status": "executed", "result": result}
                                     audit.log(
                                         event_type="execution",
-                                        company_id=st.session_state.company_id,
+                                        company_id=company_id,
                                         action_id=action.id,
                                         action_type=action.action_type,
                                         actor=user.username,
@@ -204,13 +199,10 @@ with review_tab:
                                         sender=str(sender),
                                     )
                                 except Exception as exc:
-                                    st.session_state.decisions[action_id] = {
-                                        "status": "error",
-                                        "error": str(exc),
-                                    }
+                                    st.session_state.decisions[action_id] = {"status": "error", "error": str(exc)}
                                     audit.log(
                                         event_type="execution",
-                                        company_id=st.session_state.company_id,
+                                        company_id=company_id,
                                         action_id=action.id,
                                         action_type=action.action_type,
                                         actor=user.username,
@@ -223,15 +215,11 @@ with review_tab:
                                 st.rerun()
 
                         with reject_col:
-                            if st.button(
-                                "却下",
-                                use_container_width=True,
-                                key=f"reject_{action_id}",
-                            ):
+                            if st.button("却下", use_container_width=True, key=f"reject_{action_id}"):
                                 st.session_state.decisions[action_id] = {"status": "rejected"}
                                 audit.log(
                                     event_type="rejection",
-                                    company_id=st.session_state.company_id,
+                                    company_id=company_id,
                                     action_id=str(action_id),
                                     action_type=str(action_data.get("action_type", "")),
                                     actor=user.username,
@@ -245,11 +233,10 @@ with review_tab:
 if audit_tab is not None:
     with audit_tab:
         st.subheader("操作・監査ログ")
-        st.caption("承認、却下、実行結果を時系列で確認できます。")
         events = audit.list_events(limit=200)
         company_only = st.checkbox("現在の会社設定だけ表示", value=True)
         if company_only:
-            events = [e for e in events if e.get("company_id") == st.session_state.company_id]
+            events = [e for e in events if e.get("company_id") == company_id]
 
         if not events:
             st.write("監査ログはまだありません。")
