@@ -7,6 +7,7 @@ contacts_token.json
 gmail_action_token.json
 calendar_action_token.json
 data/audit_log.jsonl
+data/users.json
 __pycache__/
 *.pyc
 .venv/
