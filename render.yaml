@@ -11,3 +11,7 @@ services:
         value: "true"
       - key: ALLOW_LIVE_WRITES
         value: "false"
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_USER_PASSWORD
+        sync: false
