@@ -73,16 +73,29 @@ class UserStore:
     def ensure_demo_users(self) -> None:
         if self._load():
             return
+
+        environment = os.getenv("APP_ENV", "demo").strip().lower()
+        admin_password = os.getenv("DEMO_ADMIN_PASSWORD", "").strip()
+        user_password = os.getenv("DEMO_USER_PASSWORD", "").strip()
+
+        if environment == "demo":
+            admin_password = admin_password or "change-me-admin"
+            user_password = user_password or "change-me-user"
+        elif not admin_password or not user_password:
+            raise RuntimeError(
+                "DEMO_ADMIN_PASSWORD and DEMO_USER_PASSWORD must be explicitly set when APP_ENV is not demo and the user database is empty."
+            )
+
         self.create_user(
             username="admin",
-            password=os.getenv("DEMO_ADMIN_PASSWORD", "change-me-admin"),
+            password=admin_password,
             role="admin",
             company_id="default",
             display_name="Demo Admin",
         )
         self.create_user(
             username="sales",
-            password=os.getenv("DEMO_USER_PASSWORD", "change-me-user"),
+            password=user_password,
             role="user",
             company_id="default",
             display_name="Demo Sales",
