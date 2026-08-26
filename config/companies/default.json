@@ -1,0 +1,33 @@
+{
+  "id": "default",
+  "company_name": "Demo Company",
+  "industry": "B2B services",
+  "description": "A generic B2B service company used for Sales Agent demonstrations.",
+  "products_services": [
+    "Business consulting",
+    "Operational support"
+  ],
+  "ideal_customers": [
+    "Small and midsize companies",
+    "Decision makers with a clear operational problem"
+  ],
+  "sales_rules": [
+    "Prioritize inbound leads with a concrete request or meeting intent.",
+    "Avoid aggressive follow-up when the lead has clearly declined.",
+    "Prefer specific next actions over generic advice."
+  ],
+  "qualification_criteria": [
+    "Clear business need",
+    "Reasonable urgency",
+    "Decision-maker involvement or access"
+  ],
+  "tone": "professional, concise, helpful, not pushy",
+  "forbidden_claims": [
+    "Do not invent results, pricing, guarantees, or customer references."
+  ],
+  "approval_policy": {
+    "gmail_draft": true,
+    "calendar_event": true,
+    "crm_update": true
+  }
+}
