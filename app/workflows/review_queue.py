@@ -10,8 +10,8 @@ from app.orchestrator import SalesAgentOrchestrator
 class SalesReviewQueue:
     """Build a human-review queue from integrated Sales Agent analysis."""
 
-    def __init__(self) -> None:
-        self.agent = SalesAgentOrchestrator()
+    def __init__(self, company_id: str = "default") -> None:
+        self.agent = SalesAgentOrchestrator(company_id=company_id)
         self.planner = ActionPlanner()
 
     def build(self, max_results: int = 10) -> list[dict[str, Any]]:
