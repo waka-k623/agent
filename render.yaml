@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: sales-agent-demo
+    runtime: docker
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: demo
+      - key: DEMO_MODE_DEFAULT
+        value: "true"
+      - key: ALLOW_LIVE_WRITES
+        value: "false"
