@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, asdict
 from email.utils import parseaddr
 from typing import Any
 
-from app.connectors.calendar import GoogleCalendarConnector
+from app.connectors.google_calendar import GoogleCalendarConnector
 from app.connectors.contacts import GoogleContactsConnector
 from app.connectors.gmail import GmailConnector
-from app.connectors.sheets_crm import GoogleSheetsCRMConnector
+from app.connectors.sheets_crm import SheetsCRMConnector
 from app.providers.factory import get_llm_provider
 
 
@@ -40,6 +39,7 @@ Return ONLY valid JSON with these keys:
   "recommended_timing": "when to act",
   "meeting_slots": ["candidate ISO datetime", "candidate ISO datetime"],
   "draft_message": "draft reply or empty string",
+  "crm_status": "new|contacted|replied|meeting_scheduled|meeting_completed|proposal_sent|follow_up|won|lost|",
   "requires_human_approval": true
 }
 Use contact/CRM/calendar context when available. Prefer concrete recommendations over generic advice.
@@ -48,7 +48,7 @@ Use contact/CRM/calendar context when available. Prefer concrete recommendations
     def __init__(self) -> None:
         self.gmail = GmailConnector()
         self.contacts = GoogleContactsConnector()
-        self.crm = GoogleSheetsCRMConnector()
+        self.crm = SheetsCRMConnector()
         self.calendar = GoogleCalendarConnector()
         self.provider = get_llm_provider()
 
@@ -58,7 +58,7 @@ Use contact/CRM/calendar context when available. Prefer concrete recommendations
         crm_lead = self.crm.find_lead_by_email(sender_email) if sender_email else None
 
         calendar_events = self.calendar.list_upcoming_events(max_results=20)
-        available_slots = self.calendar.find_available_slots(days_ahead=7, slot_minutes=60)
+        available_slots = self.calendar.find_free_slots(days=7, slot_minutes=60)
 
         return SalesContext(
             email=message,
@@ -77,6 +77,7 @@ Use contact/CRM/calendar context when available. Prefer concrete recommendations
         raw = self.provider.generate(self.SYSTEM_PROMPT, prompt)
         result = self._parse_json(raw)
         result["message_id"] = message.get("id")
+        result["thread_id"] = message.get("thread_id")
         result["sender"] = message.get("from", "")
         result["subject"] = message.get("subject", "")
         result["context_snapshot"] = {
@@ -122,5 +123,6 @@ Use contact/CRM/calendar context when available. Prefer concrete recommendations
                 "recommended_timing": "now",
                 "meeting_slots": [],
                 "draft_message": "",
+                "crm_status": "",
                 "requires_human_approval": True,
             }
