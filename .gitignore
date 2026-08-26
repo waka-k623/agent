@@ -1,6 +1,11 @@
 .env
 credentials.json
 token.json
+calendar_token.json
+sheets_token.json
+contacts_token.json
+gmail_action_token.json
+calendar_action_token.json
 __pycache__/
 *.pyc
 .venv/
