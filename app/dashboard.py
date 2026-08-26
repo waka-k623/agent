@@ -7,6 +7,7 @@ import streamlit as st
 from app.actions.approval import ProposedAction
 from app.actions.executor import ActionExecutor
 from app.audit import AuditLogger
+from app.auth import UserContext
 from app.company_config import CompanyConfigStore
 from app.workflows.review_queue import SalesReviewQueue
 
@@ -23,23 +24,40 @@ if "company_id" not in st.session_state:
     st.session_state.company_id = "default"
 if "actor" not in st.session_state:
     st.session_state.actor = "local_user"
+if "role" not in st.session_state:
+    st.session_state.role = "user"
 
 store = CompanyConfigStore()
 audit = AuditLogger()
 company_ids = store.list_company_ids() or ["default"]
 
-sidebar_company = st.sidebar.selectbox(
-    "会社設定",
-    options=company_ids,
-    index=company_ids.index(st.session_state.company_id)
-    if st.session_state.company_id in company_ids
-    else 0,
-)
 st.session_state.actor = st.sidebar.text_input(
     "操作者",
     value=st.session_state.actor,
     help="監査ログに記録する操作者名です。企業導入時はログインユーザーIDに置き換えます。",
 )
+st.session_state.role = st.sidebar.selectbox(
+    "権限",
+    options=["user", "admin"],
+    index=0 if st.session_state.role == "user" else 1,
+    format_func=lambda value: "一般ユーザー" if value == "user" else "管理者",
+)
+user = UserContext(
+    username=st.session_state.actor or "unknown",
+    role=st.session_state.role,
+)
+
+if user.can_manage_company_settings():
+    sidebar_company = st.sidebar.selectbox(
+        "会社設定",
+        options=company_ids,
+        index=company_ids.index(st.session_state.company_id)
+        if st.session_state.company_id in company_ids
+        else 0,
+    )
+else:
+    sidebar_company = st.session_state.company_id
+    st.sidebar.caption(f"会社設定: {sidebar_company}")
 
 if sidebar_company != st.session_state.company_id:
     st.session_state.company_id = sidebar_company
@@ -71,7 +89,11 @@ def proposed_action_from_dict(data: dict[str, Any]) -> ProposedAction:
     )
 
 
-review_tab, audit_tab = st.tabs(["承認キュー", "監査ログ"])
+if user.can_view_audit_log():
+    review_tab, audit_tab = st.tabs(["承認キュー", "監査ログ"])
+else:
+    review_tab = st.container()
+    audit_tab = None
 
 with review_tab:
     col1, col2 = st.columns([1, 4])
@@ -138,6 +160,10 @@ with review_tab:
                                 st.error(f"実行エラー: {decision.get('error')}")
                             continue
 
+                        if not user.can_approve_actions():
+                            st.warning("このユーザーには承認権限がありません。")
+                            continue
+
                         approve_col, reject_col = st.columns(2)
                         with approve_col:
                             if st.button(
@@ -153,7 +179,7 @@ with review_tab:
                                     company_id=st.session_state.company_id,
                                     action_id=action.id,
                                     action_type=action.action_type,
-                                    actor=st.session_state.actor or "unknown",
+                                    actor=user.username,
                                     status="approved",
                                     payload=action.payload,
                                     subject=str(subject),
@@ -170,7 +196,7 @@ with review_tab:
                                         company_id=st.session_state.company_id,
                                         action_id=action.id,
                                         action_type=action.action_type,
-                                        actor=st.session_state.actor or "unknown",
+                                        actor=user.username,
                                         status="executed",
                                         payload=action.payload,
                                         result=result,
@@ -187,7 +213,7 @@ with review_tab:
                                         company_id=st.session_state.company_id,
                                         action_id=action.id,
                                         action_type=action.action_type,
-                                        actor=st.session_state.actor or "unknown",
+                                        actor=user.username,
                                         status="error",
                                         payload=action.payload,
                                         error=str(exc),
@@ -208,7 +234,7 @@ with review_tab:
                                     company_id=st.session_state.company_id,
                                     action_id=str(action_id),
                                     action_type=str(action_data.get("action_type", "")),
-                                    actor=st.session_state.actor or "unknown",
+                                    actor=user.username,
                                     status="rejected",
                                     payload=action_data.get("payload", {}),
                                     subject=str(subject),
@@ -216,29 +242,30 @@ with review_tab:
                                 )
                                 st.rerun()
 
-with audit_tab:
-    st.subheader("操作・監査ログ")
-    st.caption("承認、却下、実行結果を時系列で確認できます。")
-    events = audit.list_events(limit=200)
-    company_only = st.checkbox("現在の会社設定だけ表示", value=True)
-    if company_only:
-        events = [e for e in events if e.get("company_id") == st.session_state.company_id]
+if audit_tab is not None:
+    with audit_tab:
+        st.subheader("操作・監査ログ")
+        st.caption("承認、却下、実行結果を時系列で確認できます。")
+        events = audit.list_events(limit=200)
+        company_only = st.checkbox("現在の会社設定だけ表示", value=True)
+        if company_only:
+            events = [e for e in events if e.get("company_id") == st.session_state.company_id]
 
-    if not events:
-        st.write("監査ログはまだありません。")
-    else:
-        for event in events:
-            with st.expander(
-                f"{event.get('timestamp', '')} | {event.get('status', '')} | {event.get('action_type', '')} | {event.get('actor', '')}"
-            ):
-                st.write("**会社:**", event.get("company_id", ""))
-                st.write("**案件:**", event.get("subject", ""))
-                st.write("**相手:**", event.get("sender", ""))
-                st.write("**イベント:**", event.get("event_type", ""))
-                st.write("**Action ID:**", event.get("action_id", ""))
-                st.json(event.get("payload", {}), expanded=False)
-                if event.get("result") is not None:
-                    st.write("**実行結果**")
-                    st.json(event.get("result"), expanded=False)
-                if event.get("error"):
-                    st.error(event.get("error"))
+        if not events:
+            st.write("監査ログはまだありません。")
+        else:
+            for event in events:
+                with st.expander(
+                    f"{event.get('timestamp', '')} | {event.get('status', '')} | {event.get('action_type', '')} | {event.get('actor', '')}"
+                ):
+                    st.write("**会社:**", event.get("company_id", ""))
+                    st.write("**案件:**", event.get("subject", ""))
+                    st.write("**相手:**", event.get("sender", ""))
+                    st.write("**イベント:**", event.get("event_type", ""))
+                    st.write("**Action ID:**", event.get("action_id", ""))
+                    st.json(event.get("payload", {}), expanded=False)
+                    if event.get("result") is not None:
+                        st.write("**実行結果**")
+                        st.json(event.get("result"), expanded=False)
+                    if event.get("error"):
+                        st.error(event.get("error"))
