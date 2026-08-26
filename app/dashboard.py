@@ -9,6 +9,7 @@ from app.actions.executor import ActionExecutor
 from app.audit import AuditLogger
 from app.auth import UserContext, UserStore
 from app.company_config import CompanyConfigStore
+from app.demo_data import build_demo_queue, calculate_demo_kpis
 from app.workflows.review_queue import SalesReviewQueue
 
 st.set_page_config(page_title="Sales Agent Review", page_icon="🤖", layout="wide")
@@ -19,6 +20,8 @@ if "decisions" not in st.session_state:
     st.session_state.decisions = {}
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
+if "demo_mode" not in st.session_state:
+    st.session_state.demo_mode = True
 
 user_store = UserStore()
 user_store.ensure_demo_users()
@@ -57,6 +60,11 @@ st.caption("営業案件を確認し、AIが提案した外部アクションを
 
 st.sidebar.write(f"**ログイン:** {user.display_name or user.username}")
 st.sidebar.caption("管理者" if user.role == "admin" else "一般ユーザー")
+st.session_state.demo_mode = st.sidebar.toggle(
+    "デモモード",
+    value=st.session_state.demo_mode,
+    help="実データや外部サービスを書き換えず、サンプル案件でSales Agentの動作を確認します。",
+)
 if st.sidebar.button("ログアウト", use_container_width=True):
     st.session_state.current_user = None
     st.session_state.queue = []
@@ -79,6 +87,11 @@ except Exception:
 
 
 def refresh_queue() -> None:
+    if st.session_state.demo_mode:
+        st.session_state.queue = build_demo_queue()
+        st.session_state.decisions = {}
+        return
+
     with st.spinner("Gmail / Contacts / CRM / Calendar を確認しています..."):
         st.session_state.queue = SalesReviewQueue(company_id=company_id).build(max_results=10)
         st.session_state.decisions = {}
@@ -101,16 +114,35 @@ else:
     audit_tab = None
 
 with review_tab:
+    if st.session_state.demo_mode:
+        st.success("デモモード: サンプル営業データを使用し、外部サービスへの書き込みは行いません。")
+
     col1, col2 = st.columns([1, 4])
     with col1:
-        if st.button("受信箱を分析", type="primary", use_container_width=True):
+        button_label = "デモ案件を読み込む" if st.session_state.demo_mode else "受信箱を分析"
+        if st.button(button_label, type="primary", use_container_width=True):
             refresh_queue()
     with col2:
-        st.info("承認ボタンを押すまで、Gmail・Calendar・CRMへの書き込みは実行されません。")
+        if st.session_state.demo_mode:
+            st.info("承認操作を試せますが、Gmail・Calendar・CRMは変更されません。")
+        else:
+            st.info("承認ボタンを押すまで、Gmail・Calendar・CRMへの書き込みは実行されません。")
 
     queue = st.session_state.queue
+    if queue:
+        kpis = calculate_demo_kpis(queue)
+        st.subheader("営業オペレーションKPI")
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.metric("分析案件", kpis["messages_analyzed"])
+        k2.metric("営業対象", kpis["sales_relevant"])
+        k3.metric("高優先度", kpis["high_priority"])
+        k4.metric("提案アクション", kpis["proposed_actions"])
+        k5.metric("推定削減時間", f'{kpis["estimated_minutes_saved"]}分')
+        st.caption("推定削減時間はデモ用の仮定値です。実導入時は実測値に置き換えます。")
+
     if not queue:
-        st.write("まだ分析結果がありません。『受信箱を分析』を押してください。")
+        empty_label = "『デモ案件を読み込む』" if st.session_state.demo_mode else "『受信箱を分析』"
+        st.write(f"まだ分析結果がありません。{empty_label}を押してください。")
     else:
         for index, item in enumerate(queue):
             analysis = item.get("analysis", {})
@@ -157,6 +189,8 @@ with review_tab:
                         if decision:
                             if decision.get("status") == "executed":
                                 st.success(f"承認・実行済み: {decision.get('result')}")
+                            elif decision.get("status") == "simulated":
+                                st.success("承認済み（デモ実行）")
                             elif decision.get("status") == "rejected":
                                 st.warning("却下済み")
                             elif decision.get("status") == "error":
@@ -172,62 +206,69 @@ with review_tab:
                             if st.button("承認して実行", type="primary", use_container_width=True, key=f"approve_{action_id}"):
                                 action = proposed_action_from_dict(action_data)
                                 action.approve()
-                                audit.log(
-                                    event_type="approval",
-                                    company_id=company_id,
-                                    action_id=action.id,
-                                    action_type=action.action_type,
-                                    actor=user.username,
-                                    status="approved",
-                                    payload=action.payload,
-                                    subject=str(subject),
-                                    sender=str(sender),
-                                )
-                                try:
-                                    result = ActionExecutor().execute(action)
-                                    st.session_state.decisions[action_id] = {"status": "executed", "result": result}
+                                if st.session_state.demo_mode:
+                                    st.session_state.decisions[action_id] = {
+                                        "status": "simulated",
+                                        "result": {"demo": True, "action_type": action.action_type},
+                                    }
+                                else:
                                     audit.log(
-                                        event_type="execution",
+                                        event_type="approval",
                                         company_id=company_id,
                                         action_id=action.id,
                                         action_type=action.action_type,
                                         actor=user.username,
-                                        status="executed",
+                                        status="approved",
                                         payload=action.payload,
-                                        result=result,
                                         subject=str(subject),
                                         sender=str(sender),
                                     )
-                                except Exception as exc:
-                                    st.session_state.decisions[action_id] = {"status": "error", "error": str(exc)}
-                                    audit.log(
-                                        event_type="execution",
-                                        company_id=company_id,
-                                        action_id=action.id,
-                                        action_type=action.action_type,
-                                        actor=user.username,
-                                        status="error",
-                                        payload=action.payload,
-                                        error=str(exc),
-                                        subject=str(subject),
-                                        sender=str(sender),
-                                    )
+                                    try:
+                                        result = ActionExecutor().execute(action)
+                                        st.session_state.decisions[action_id] = {"status": "executed", "result": result}
+                                        audit.log(
+                                            event_type="execution",
+                                            company_id=company_id,
+                                            action_id=action.id,
+                                            action_type=action.action_type,
+                                            actor=user.username,
+                                            status="executed",
+                                            payload=action.payload,
+                                            result=result,
+                                            subject=str(subject),
+                                            sender=str(sender),
+                                        )
+                                    except Exception as exc:
+                                        st.session_state.decisions[action_id] = {"status": "error", "error": str(exc)}
+                                        audit.log(
+                                            event_type="execution",
+                                            company_id=company_id,
+                                            action_id=action.id,
+                                            action_type=action.action_type,
+                                            actor=user.username,
+                                            status="error",
+                                            payload=action.payload,
+                                            error=str(exc),
+                                            subject=str(subject),
+                                            sender=str(sender),
+                                        )
                                 st.rerun()
 
                         with reject_col:
                             if st.button("却下", use_container_width=True, key=f"reject_{action_id}"):
                                 st.session_state.decisions[action_id] = {"status": "rejected"}
-                                audit.log(
-                                    event_type="rejection",
-                                    company_id=company_id,
-                                    action_id=str(action_id),
-                                    action_type=str(action_data.get("action_type", "")),
-                                    actor=user.username,
-                                    status="rejected",
-                                    payload=action_data.get("payload", {}),
-                                    subject=str(subject),
-                                    sender=str(sender),
-                                )
+                                if not st.session_state.demo_mode:
+                                    audit.log(
+                                        event_type="rejection",
+                                        company_id=company_id,
+                                        action_id=str(action_id),
+                                        action_type=str(action_data.get("action_type", "")),
+                                        actor=user.username,
+                                        status="rejected",
+                                        payload=action_data.get("payload", {}),
+                                        subject=str(subject),
+                                        sender=str(sender),
+                                    )
                                 st.rerun()
 
 if audit_tab is not None:
