@@ -58,8 +58,42 @@ streamlit run app/dashboard.py
 - Gmail下書き作成の承認 / 却下
 - Google Calendar予定作成の承認 / 却下
 - Google Sheets CRM更新の承認 / 却下
+- デモモードとKPI表示
+- ログイン / 権限管理
+- 操作・監査ログ
 
-`承認して実行` を押すまで外部への書き込みは行われません。
+## Runtime safety
+
+デモ公開時は以下を推奨します。
+
+```env
+APP_ENV=demo
+DEMO_MODE_DEFAULT=true
+ALLOW_LIVE_WRITES=false
+```
+
+この状態では承認操作をしても、実データへのライブ書き込みは許可されません。
+
+実運用環境で外部サービスへの書き込みを許可する場合のみ、十分に認証・権限・接続先を確認した上で以下を設定します。
+
+```env
+APP_ENV=production
+DEMO_MODE_DEFAULT=false
+ALLOW_LIVE_WRITES=true
+```
+
+## Deployment
+
+Dockerイメージで起動できます。
+
+```bash
+docker build -t sales-agent .
+docker run --env-file .env -p 8501:8501 sales-agent
+```
+
+`render.yaml` も含まれており、デモ環境は `ALLOW_LIVE_WRITES=false` を既定値として公開できる構成です。
+
+本番用のOAuth認証情報、APIキー、ユーザーDB、監査ログはGitHubにコミットせず、デプロイ先のSecrets / 環境変数 / 永続ストレージで管理してください。
 
 ## Roadmap
 
@@ -83,6 +117,8 @@ streamlit run app/dashboard.py
 - 操作ログ
 - 権限管理
 - KPI / 効果測定
+- ログイン
+- デモ / 本番環境分離
 
 ### Phase 4 — Industry variants
 - 建設
