@@ -10,6 +10,7 @@ from app.audit import AuditLogger
 from app.auth import UserContext, UserStore
 from app.company_config import CompanyConfigStore
 from app.demo_data import build_demo_queue, calculate_demo_kpis
+from app.preflight import run_preflight, summarize_preflight
 from app.runtime import RuntimeConfig
 from app.workflows.review_queue import SalesReviewQueue
 
@@ -127,10 +128,11 @@ def proposed_action_from_dict(data: dict[str, Any]) -> ProposedAction:
 
 
 if user.can_view_audit_log():
-    review_tab, audit_tab = st.tabs(["承認キュー", "監査ログ"])
+    review_tab, audit_tab, preflight_tab = st.tabs(["承認キュー", "監査ログ", "公開前診断"])
 else:
     review_tab = st.container()
     audit_tab = None
+    preflight_tab = None
 
 with review_tab:
     if st.session_state.demo_mode:
@@ -316,3 +318,28 @@ if audit_tab is not None:
                         st.json(event.get("result"), expanded=False)
                     if event.get("error"):
                         st.error(event.get("error"))
+
+if preflight_tab is not None:
+    with preflight_tab:
+        st.subheader("公開前診断")
+        st.caption("AI・Google連携・認証・安全設定の不足をまとめて確認します。")
+        checks = run_preflight()
+        summary = summarize_preflight(checks)
+
+        p1, p2, p3 = st.columns(3)
+        p1.metric("PASS", summary["passed"])
+        p2.metric("ERROR", summary["errors"])
+        p3.metric("WARNING", summary["warnings"])
+
+        if summary["ready"]:
+            st.success("必須チェックは通過しています。")
+        else:
+            st.error("公開前に解消すべき必須項目があります。")
+
+        for check in checks:
+            if check.ok:
+                st.success(f"✅ {check.name}: {check.detail}")
+            elif check.severity == "warning":
+                st.warning(f"⚠️ {check.name}: {check.detail}")
+            else:
+                st.error(f"❌ {check.name}: {check.detail}")
