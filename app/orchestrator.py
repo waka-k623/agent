@@ -5,6 +5,7 @@ from dataclasses import dataclass, asdict
 from email.utils import parseaddr
 from typing import Any
 
+from app.company_config import CompanyConfig, CompanyConfigStore
 from app.connectors.google_calendar import GoogleCalendarConnector
 from app.connectors.contacts import GoogleContactsConnector
 from app.connectors.gmail import GmailConnector
@@ -14,6 +15,7 @@ from app.providers.factory import get_llm_provider
 
 @dataclass
 class SalesContext:
+    company: dict[str, Any]
     email: dict[str, Any]
     contact: dict[str, Any] | None
     crm_lead: dict[str, Any] | None
@@ -25,7 +27,9 @@ class SalesAgentOrchestrator:
     """Coordinates Gmail, Contacts, Sheets CRM and Calendar for one sales decision."""
 
     SYSTEM_PROMPT = """You are Sales Agent v1 for a human salesperson.
-Use the supplied business context to decide what the salesperson should do next.
+Use both the COMPANY CONFIGURATION and BUSINESS CONTEXT supplied by the application.
+The company configuration is authoritative for product scope, ideal customers, sales rules, tone, qualification criteria and forbidden claims.
+Never invent company facts, pricing, results, guarantees or customer references.
 Never claim that an email was sent, a calendar event was created, or CRM data was changed unless that action actually happened.
 External writes require human approval.
 Return ONLY valid JSON with these keys:
@@ -45,7 +49,8 @@ Return ONLY valid JSON with these keys:
 Use contact/CRM/calendar context when available. Prefer concrete recommendations over generic advice.
 """
 
-    def __init__(self) -> None:
+    def __init__(self, company_id: str = "default") -> None:
+        self.company: CompanyConfig = CompanyConfigStore().load(company_id)
         self.gmail = GmailConnector()
         self.contacts = GoogleContactsConnector()
         self.crm = SheetsCRMConnector()
@@ -61,6 +66,7 @@ Use contact/CRM/calendar context when available. Prefer concrete recommendations
         available_slots = self.calendar.find_free_slots(days=7, slot_minutes=60)
 
         return SalesContext(
+            company=self.company.to_prompt_context(),
             email=message,
             contact=contact,
             crm_lead=crm_lead,
@@ -71,7 +77,7 @@ Use contact/CRM/calendar context when available. Prefer concrete recommendations
     def analyze_message(self, message: dict[str, Any]) -> dict[str, Any]:
         context = self.build_context(message)
         prompt = (
-            "Analyze this sales situation using all available context.\n\n"
+            "Analyze this sales situation using the company configuration and all available context.\n\n"
             + json.dumps(asdict(context), ensure_ascii=False, default=str)
         )
         raw = self.provider.generate(self.SYSTEM_PROMPT, prompt)
@@ -80,6 +86,8 @@ Use contact/CRM/calendar context when available. Prefer concrete recommendations
         result["thread_id"] = message.get("thread_id")
         result["sender"] = message.get("from", "")
         result["subject"] = message.get("subject", "")
+        result["company_id"] = self.company.id
+        result["company_name"] = self.company.company_name
         result["context_snapshot"] = {
             "contact_found": context.contact is not None,
             "crm_lead_found": context.crm_lead is not None,
