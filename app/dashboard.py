@@ -35,13 +35,30 @@ if "demo_mode" not in st.session_state:
     st.session_state.demo_mode = runtime.demo_mode_default or runtime.is_demo
 
 user_store = UserStore()
-user_store.ensure_demo_users()
+if not runtime.is_demo:
+    user_store.ensure_demo_users()
 company_store = CompanyConfigStore()
 audit = AuditLogger()
 
 
 def login_screen() -> None:
-    st.title("Sales Agent Login")
+    st.title("Sales Agent Demo")
+    st.caption("公開デモ環境です。誰でもテスト用ユーザーとして入れます。")
+
+    if runtime.is_demo:
+        st.info("この環境では実データの読み込み・外部サービスへのライブ書き込みは無効です。")
+        if st.button("デモを開始", type="primary", use_container_width=True):
+            st.session_state.current_user = UserContext(
+                username="demo",
+                role="admin",
+                company_id="default",
+                display_name="Demo User",
+            )
+            st.session_state.queue = []
+            st.session_state.decisions = {}
+            st.rerun()
+        return
+
     st.caption("営業支援AIの管理画面にログインしてください。")
     with st.form("login_form"):
         username = st.text_input("ユーザー名")
@@ -57,9 +74,6 @@ def login_screen() -> None:
         st.session_state.queue = []
         st.session_state.decisions = {}
         st.rerun()
-
-    if runtime.is_demo:
-        st.info("デモ環境です。外部サービスへのライブ書き込みは無効化されています。")
 
 
 if st.session_state.current_user is None:
