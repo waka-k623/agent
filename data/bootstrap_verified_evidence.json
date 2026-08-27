@@ -1,0 +1,78 @@
+{
+  "market_context": {
+    "sme_ai_adoption_rate_percent": 30.3,
+    "source_name": "2026年版 中小企業白書・小規模企業白書の概要",
+    "source_url": "https://www.chusho.meti.go.jp/pamflet/hakusyo/2026/PDF/2026gaiyou.pdf",
+    "note": "中小企業全体のAI活用状況。企業固有・業界固有の導入率ではないため、企業個別スコアの代替値には使わない。"
+  },
+  "companies": [
+    {
+      "company_name": "株式会社オーカワパン",
+      "region": "福井県",
+      "industry": "製造業",
+      "employee_count": 109,
+      "company_size_source": {
+        "name": "福井県公式 291JOBS",
+        "url": "https://291jobs.pref.fukui.lg.jp/shinsotsu/search/detail.php?ID=432"
+      },
+      "dx_initiative": "商品開発・製造・営業の3部門連携",
+      "dx_source": {
+        "name": "ふくいDX推進宣言企業",
+        "url": "https://www.fisc.jp/itdx/sengen_touroku/"
+      },
+      "verified_contact": {
+        "type": "phone",
+        "value": "0776-66-0237",
+        "source_url": "https://291jobs.pref.fukui.lg.jp/shinsotsu/search/detail.php?ID=432"
+      },
+      "missing_for_sales_decision": ["automation_need", "pain_signal", "agent_fit"]
+    },
+    {
+      "company_name": "カネタ株式会社",
+      "region": "福井県",
+      "industry": "金属建材卸売業",
+      "employee_count": 59,
+      "company_size_source": {
+        "name": "ふくいDX推進宣言企業 登録企業一覧",
+        "url": "https://www.fisc.jp/main/wp-content/uploads/2024/03/ef7de28d36e4f07280f018c59ecd4dae.pdf"
+      },
+      "dx_initiative": "業務基幹システムの導入",
+      "dx_source": {
+        "name": "ふくいDX推進宣言企業",
+        "url": "https://www.fisc.jp/itdx/sengen_touroku/"
+      },
+      "verified_contact": {
+        "type": "web_contact",
+        "value": "https://www.kaneta-co.com/contact",
+        "source_url": "https://www.kaneta-co.com/contact"
+      },
+      "missing_for_sales_decision": ["automation_need", "pain_signal", "agent_fit"]
+    },
+    {
+      "company_name": "株式会社ササマタ",
+      "region": "福井県",
+      "industry": "製造業",
+      "employee_count": 90,
+      "company_size_source": {
+        "name": "ふくいDX推進宣言企業 登録企業一覧",
+        "url": "https://www.fisc.jp/main/wp-content/uploads/2024/03/ef7de28d36e4f07280f018c59ecd4dae.pdf"
+      },
+      "dx_initiative": "顧客データの分析",
+      "dx_source": {
+        "name": "ふくいDX推進宣言企業",
+        "url": "https://www.fisc.jp/itdx/sengen_touroku/"
+      },
+      "verified_contact": {
+        "type": "web_contact",
+        "value": "https://ssmt.jp/contact/",
+        "source_url": "https://ssmt.jp/contact/"
+      },
+      "additional_verified_fact": {
+        "name": "公式会社情報",
+        "value": "公式サイトにはE-mail info@ssmt.jpの掲載あり",
+        "url": "https://ssmt.jp/company/"
+      },
+      "missing_for_sales_decision": ["automation_need", "pain_signal", "agent_fit"]
+    }
+  ]
+}
