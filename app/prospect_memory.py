@@ -4,7 +4,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Optional
-import json
+
+from app.storage import JsonStateStore
 
 
 @dataclass
@@ -38,24 +39,21 @@ class ProspectMemoryRecord:
 class ProspectMemoryStore:
     """Persistent memory for researched companies.
 
-    The next research cycle should reuse stored facts and refresh only stale,
-    missing, or contradictory evidence rather than starting from zero.
+    Uses Postgres automatically when DATABASE_URL is set. Falls back to local JSON
+    for local development/demo use.
     """
 
     DEFAULT_PATH = Path("data/prospect_memory.json")
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or self.DEFAULT_PATH
+        self.state = JsonStateStore("prospect_memory", str(self.path))
 
     def _load_all(self) -> dict[str, dict[str, Any]]:
-        if not self.path.exists():
-            return {}
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
+        return self.state.load_mapping()
 
     def _save_all(self, data: dict[str, dict[str, Any]]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.state.save_mapping(data)
 
     @staticmethod
     def company_key(company_name: str, website: str = "") -> str:
@@ -71,7 +69,6 @@ class ProspectMemoryStore:
         data = self._load_all()
         existing = data.get(record.company_key, {})
 
-        # Preserve unique sources and merge evidence instead of overwriting history blindly.
         merged_sources = list(dict.fromkeys(existing.get("source_urls", []) + record.source_urls))
         merged_evidence = dict(existing.get("evidence", {}))
         merged_evidence.update(record.evidence)
@@ -101,11 +98,6 @@ class ProspectMemoryStore:
         return records
 
     def research_plan(self, record: ProspectMemoryRecord, stale_after_days: int = 30) -> dict[str, Any]:
-        """Return a delta-research plan using stored memory.
-
-        Verified evidence may be reused if still fresh. Missing/stale fields are refreshed.
-        A previous exclusion is not forgotten, but can be re-opened if new evidence appears.
-        """
         today = date.today()
         stale = True
         if record.last_researched_at:
