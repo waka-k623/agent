@@ -103,6 +103,12 @@ class MasterAgent:
                 "送信済み案件の回答期限と追客上限を管理",
             ),
             (
+                "deal_intelligence",
+                [py, "scripts/run_deal_intelligence.py"],
+                self.exists("opportunities.json"),
+                "商談/提案案件について競合分析と価格最適化を実行。価格提示は人間承認待ち",
+            ),
+            (
                 "kpi_pdca",
                 [py, "scripts/run_daily_sales_cycle.py"],
                 True,
@@ -133,6 +139,7 @@ class MasterAgent:
                 "ai_reasoning": self.has_ai,
                 "google_tracking": self.has_google,
                 "persistent_memory": self.has_db,
+                "deal_intelligence": self.exists("opportunities.json"),
             },
             "guardrails": {
                 "fabricated_metrics": "forbidden",
