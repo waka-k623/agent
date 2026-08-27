@@ -1,0 +1,71 @@
+[
+  {
+    "company_name": "株式会社オーカワパン",
+    "website": "https://okawapan.co.jp/",
+    "industry": "パン製造・販売",
+    "region": "福井県",
+    "discovery_sources": [
+      {
+        "name": "ふくいDX推進宣言企業",
+        "url": "https://www.fisc.jp/itdx/sengen_touroku/",
+        "fact": "DX推進宣言企業として登録。商品開発・製造・営業の3部門連携を掲げる。"
+      },
+      {
+        "name": "福井県公式 291JOBS",
+        "url": "https://291jobs.pref.fukui.lg.jp/shinsotsu/search/detail.php?ID=432",
+        "fact": "福井県坂井市、従業員109人、企業規模300人未満、非上場。"
+      },
+      {
+        "name": "株式会社オーカワパン 採用情報",
+        "url": "https://okawapan.co.jp/recruit/",
+        "fact": "製造・営業・発注入力等の具体的な業務内容を公開。"
+      }
+    ]
+  },
+  {
+    "company_name": "カネタ株式会社",
+    "website": "https://kaneta-co.com/",
+    "industry": "金属建材卸売・販売",
+    "region": "福井県",
+    "discovery_sources": [
+      {
+        "name": "ふくいDX推進宣言企業",
+        "url": "https://www.fisc.jp/itdx/sengen_touroku/",
+        "fact": "DX推進宣言企業として登録。業務基幹システムの導入を掲げる。"
+      },
+      {
+        "name": "カネタ株式会社 公式サイト",
+        "url": "https://kaneta-co.com/",
+        "fact": "福井市の金属建材総合商社。採用情報を公開。"
+      },
+      {
+        "name": "カネタ株式会社 採用情報",
+        "url": "https://www.kaneta-co.com/recruit",
+        "fact": "営業、営業事務、配送等の採用を継続している。"
+      }
+    ]
+  },
+  {
+    "company_name": "株式会社ササマタ",
+    "website": "https://ssmt.jp/",
+    "industry": "眼鏡部品製造",
+    "region": "福井県",
+    "discovery_sources": [
+      {
+        "name": "ふくいDX推進宣言企業",
+        "url": "https://www.fisc.jp/itdx/sengen_touroku/",
+        "fact": "DX推進宣言企業として登録。顧客データの分析を掲げる。"
+      },
+      {
+        "name": "株式会社ササマタ 会社情報",
+        "url": "https://ssmt.jp/company/",
+        "fact": "福井県鯖江市の眼鏡部品メーカー。自動化・大量生産への取り組み履歴を公開。"
+      },
+      {
+        "name": "株式会社ササマタ お問い合わせ",
+        "url": "https://ssmt.jp/contact/",
+        "fact": "法人向け取引を含む問い合わせフォームと電話窓口を公開。"
+      }
+    ]
+  }
+]
