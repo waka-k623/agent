@@ -1,0 +1,58 @@
+name: Daily Sales Agent Cycle
+
+on:
+  schedule:
+    # 07:00 JST = 22:00 UTC (previous day)
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+
+jobs:
+  sales-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_ENV: production
+      ALLOW_LIVE_WRITES: "false"
+      LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GOOGLE_CREDENTIALS_PATH: credentials.json
+      GOOGLE_TOKEN_PATH: token.json
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Materialize optional Google credentials
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          GOOGLE_TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN_JSON }}
+        run: |
+          if [ -n "$GOOGLE_CREDENTIALS_JSON" ]; then printf '%s' "$GOOGLE_CREDENTIALS_JSON" > credentials.json; fi
+          if [ -n "$GOOGLE_TOKEN_JSON" ]; then printf '%s' "$GOOGLE_TOKEN_JSON" > token.json; fi
+
+      - name: Run autonomous cycle
+        run: python scripts/run_autonomous_cycle.py
+
+      - name: Upload cycle report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-sales-cycle-report
+          path: |
+            data/latest_autonomous_cycle.json
+            data/latest_daily_sales_cycle.json
+            data/strategy_state.json
+          if-no-files-found: ignore
+          retention-days: 14
